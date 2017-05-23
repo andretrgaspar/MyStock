@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MyStock</title>
+
+    <!-- Bootstrap -->
+    <link rel="stylesheet" type="text/css" href="css/bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="css/bootstrap-theme.min.css" />  
+    <link rel="stylesheet" type="text/css" href="css/default.css" />
+	<link rel="stylesheet" type="text/css" href="css/component.css" />
+    <link rel="stylesheet" type="text/css" href="css/jPushMenu.css" />
+    <link rel="stylesheet" type="text/css" href="css/main.css" />  
+    
+	<script type="text/javascript" src="js/cordova-1.9.0.js"></script>	
+    <script type="text/javascript" src="js/jquery.min.js"></script>
+    <script type="text/javascript" src="js/bootstrap.min.js"></script>
+    <script type="text/javascript" src="js/jPushMenu.js"></script>  
+	<script type="text/javascript" src="js/bootpag.js"></script>  
+      
+    <script type="text/javascript">
+		var actualPage = 1;
+		var orderCollumn = '';
+		var typeOrder = 'ASC';
+		
+        /////
+        ///Save Data Function
+        /////
+        function saveData(){
+            //Our text field data
+            var codigo = $('#code').val();
+            var descricao = $('#description').val();
+            var id_categoria = $('#categoria').val();
+            var sysdate = new Date();
+            var active = 'Y';
+			
+			if (codigo != '' && descricao != '') {
+
+				//Check databases are supported
+				if(openDatabase){
+					//Open a database transaction
+					db.transaction(function(tx){
+						//Execute an SQL statement to create the table "tblDemo" 
+						//only if it doesn't already exist        
+						//tx.executeSql('DROP TABLE IF EXISTS produtos;',[],nullData,errorHandler);
+						tx.executeSql('CREATE TABLE IF NOT EXISTS produtos ('
+									   + 'id_produto INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,'
+									   + 'codigo VARCHAR(255),'
+									   + 'descricao VARCHAR(255),'
+									   + 'id_categoria INTEGER,'
+									   + 'date_created DATE,'
+									   + 'active VARCHAR(1)'
+									   + ');',[],nullData,errorHandler);
+					});
+
+					//Open a new transaction
+					db.transaction(function(tx){
+						//Exexute an INSERT with the name, age and favourite colour, 
+						//we set values outside the SQL string for added security and 
+						//to prevent SQL injections, the values are represented with "?"
+						tx.executeSql('INSERT INTO produtos ('
+									   + 'codigo, descricao, id_categoria, date_created, active )'
+									   + 'VALUES (?, ?, ?, ?, ?);'
+									   ,[codigo,descricao,id_categoria,sysdate,active],nullData,errorHandler);
+						
+						$('#code').val('');
+						$('#description').val('');
+						
+						//$('#result_sucesso').text('');
+						//$('<p>Inserido com sucesso!</p>').appendTo('#result_sucesso');
+						$('#result_sucesso').show();
+						$('#result_sucesso').css("opacity", "");
+						createAutoClosingAlert("#result_sucesso", 5000);
+					});
+				}
+			}
+			else {
+				//$('#result_erro').text('');
+				//$('<p>Deve preencher todos os campos!</p>').appendTo('#result_erro');
+				$('#result_erro').show();
+				$('#result_erro').css("opacity", "");
+				createAutoClosingAlert("#result_erro", 5000);
+			}
+        }
+
+        /////
+        ///Get Data Function
+        /////
+        function getData(pagen, sort){
+            //Create an empty results string
+            var strResults = '';
+			actualPage = pagen;
+
+            //Open a new transaction
+            db.transaction(function(tx){
+                //Select a wildcard from the database
+				var sql = 'SELECT * FROM produtos WHERE active = "Y"';
+				if (sort == orderCollumn) {
+					typeOrder = 'DESC';
+				} else {
+					typeOrder = 'ASC';
+				}
+				
+				if (sort == 'codigo') {
+					sql += ' ORDER BY codigo ' + typeOrder + ';';
+				}
+				else if (sort == 'descricao') {
+					sql += ' ORDER BY descricao ' + typeOrder + ';';
+				}
+				else if (sort == 'data') {
+					sql += ' ORDER BY date_created ' + typeOrder + ';';
+				}
+				else {
+					sql += ';';
+				}
+				
+                tx.executeSql(sql
+                               ,[]
+                               //Callback function with transaction and 
+                               //results objects
+                               ,function(tx, results){
+                                    //Count the results rows
+                                    var rowsCount = results.rows.length;  
+									var total_pag = Math.floor(rowsCount / 10) + 1;
+                                    //Loop the rows
+                                    strResults += '<table class="table table-bordered">';
+                                    strResults += '<caption>Produtos</caption>';
+                                    strResults += '<thead>';
+                                    strResults += '<tr>';
+                                    strResults += '<th><b><a href="#" id="orderCodigo">Código</a></b></th>';
+                                    strResults += '<th><b><a href="#" id="orderDescricao">Produto</a></b></th>';
+									strResults += '<th><b><a href="#" id="orderCategoria">Categoria</a></b></th>';
+									strResults += '<th><b><a href="#" id="orderData">Data criação</a></b></th>';
+                                    strResults += '</tr>';
+                                    strResults += '</thead>';
+                                    strResults += '<tbody>';
+									var init = 0;
+									var to = 10;
+									if (Math.floor(rowsCount / 10) == 0 && pagen == 1) {
+										init = 0;
+										to = rowsCount;
+									}
+									else {
+									    pagen = pagen - 1;
+										init = Number(pagen + '0');
+										to = Number(pagen + 1 + '0');
+										if (to >= rowsCount) {
+											to = rowsCount;
+										}
+										else {
+											//to igual
+										}
+									}
+                                    for (var i = init; i < to; i++){
+                                        strResults += '<tr>';
+                                        strResults += '<td>' + results.rows.item(i).codigo;
+                                        
+                                        var createDate = new Date(results.rows.item(i).date_created);
+										var actual_date = new Date();
+										var timeDiff = Math.abs(actual_date.getTime() - createDate.getTime());
+										var diffDays = Math.ceil(timeDiff / (1000 * 3600 * 24)); 
+										
+                                        if (diffDays <= 1) {
+                                            strResults += '&nbsp<span class="label label-default">Novo</span></td>';
+                                        } else {
+                                            strResults += '</td>';
+                                        }
+                                        
+                                        strResults += '<td>' + results.rows.item(i).descricao + '</td>';
+										
+										var d = new Date(results.rows.item(i).date_created);
+										var month = d.getMonth()+1;
+										var day = d.getDate();
+
+										var date_created = (day<10 ? '0' : '') + day + '/' +
+														   (month<10 ? '0' : '') + month + '/' +
+														    d.getFullYear();
+										
+										strResults += '<td>' + results.rows.item(i).id_categoria + '</td>';
+										strResults += '<td>' + date_created + '</td>';
+                                        strResults += '</tr>';
+                                    }
+                                    strResults += '</tbody>';
+                                    strResults += '</table>';
+                                    //Fill the results DIV 
+                                    $('.results').html(strResults);
+									
+									$('#page-selection').bootpag({
+										total: total_pag
+									}).on("page", function(event, num){
+										//$(".results").html("Page " + num); // or some ajax content loading...
+										
+										// ... after content load -> change total to 10
+										//$(this).bootpag({total: 10, maxVisible: 10});
+										
+										getData(num, orderCollumn);
+									 
+									});
+                                }
+                               ,errorHandler);
+            });
+			
+			orderCollumn = sort;
+        }
+
+        /////
+        ///Error Handler
+        /////
+        function errorHandler(transaction, error) {
+            //Log the error
+            console.log('Error: ' + error.message + ' (Code ' + error.code + ')');
+        }
+
+        /////
+        ///Null Data
+        /////
+        function nullData(){
+            //Can be used for callbacks etc
+        }
+        /////
+        ///Document Ready 
+        /////
+        $(document).ready(function(){
+		    var pagen = 1;
+            $('.toggle-menu').jPushMenu();
+            
+            //Bind events to the buttons to fire off the functions                       
+            $('#btnSave').bind('click' , saveData);
+            $('#btnGet').bind('click' , function() {
+				getData(1);
+				}
+			);
+			
+			$('#orderCodigo').bind('click' , function() {
+				alert(actualPage);
+				getData(actualPage, "codigo");
+			});
+            
+			$('#orderDescricao').bind('click' , function() {
+				getData(actualPage, "descricao");
+				}
+			);
+			
+			$('#orderCategoria').bind('click' , function() {
+				getData(actualPage, "categoria");
+				}
+			);
+			
+			$('#orderData').bind('click' , function() {
+				getData(actualPage, "data");
+				}
+			);
+			
+			$(".cbp-spmenu").on("click", "a.exitBtn", function(){
+				exitAppPopup();
+			});	
+			
+            //Open the database 
+            if(openDatabase){
+                db = openDatabase('Database Name' , '1.0' , 'Database Description' , 2 * 1024 * 1024);
+            }
+            //Alert the user to upgrade their browser
+            else {
+                alert('Databases not supported. Please get a proper browser');
+            }
+			
+			//Menu Button
+			document.addEventListener("deviceready", onDeviceReady, false);
+			
+        });  
+		
+		// PhoneGap is loaded and it is now safe to make calls PhoneGap methods
+		//
+		function onDeviceReady() {
+			// Register the event listener
+			document.addEventListener("menubutton", onMenuKeyDown, false);
+		}
+
+		// Handle the menu button
+		//
+		function onMenuKeyDown() {
+			$(".toggle-menu").trigger('click');
+		}
+		
+		function createAutoClosingAlert(selector, delay) {
+			window.setTimeout(function() { 
+				$(selector).fadeTo(500, 0).slideUp(500, function(){
+					//$(this).closest("." + $(this).attr("data-hide")).hide();
+					$($(selector).attr("data-hide")).hide();
+				}); }
+			, delay);
+		}
+		
+		//exit popup
+		function exitAppPopup() {
+			navigator.notification.confirm(
+				'Deseja sair da aplicação?'
+				, function(button) {
+					if (button == 2) {
+						navigator.app.exitApp();
+					} 
+				}
+				, 'Sair'
+				, 'Não,Sim'
+			);  
+			return false;
+		}
+      
+    </script>
+  </head>
+  <body>
+        <nav class="cbp-spmenu cbp-spmenu-vertical cbp-spmenu-left">
+            <h3>MyStock</h3>
+            <a href="index.html">Início</a>
+            <a href="criar_categorias.html">Criar categorias</a>
+            <a href="criar_produtos.html">Criar produtos</a>
+            <a href="#">Gerir entradas</a>
+            <a href="#">Gerir saídas</a>
+            <a href="#" class="exitBtn" id="exitBtn">Sair</a>
+        </nav>
+      
+          <nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+               <div class="navbar-header">
+                  <img class="toggle-menu menu-left" src="img/icon.png" alt="MyStock">
+                  <!-- <a class="navbar-brand" href="#">MyStock</a> -->
+               </div>
+           </nav>
+          
+            <div class="container" style="padding-top:60px;">
+
+			<div class="results_pagination">
+				<div class="results"></div>
+				
+				<div id="page-selection" class="page-selection"></div>
+
+			</div>
+      </div>
+  </body>
+</html>

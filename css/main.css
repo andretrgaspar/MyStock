@@ -1,0 +1,38 @@
+@media screen and (min-width:1px) and (max-width:1600px){
+
+.navbar-nav > li > a {padding-top:10px !important; padding-bottom:10px !important;}
+
+.navbar .brand {
+    max-height: 40px;
+    overflow: visible;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.navbar {
+  background: #0D76B7;
+  border-color: #0D76B7;
+  min-height:32px !important;
+  -webkit-border-radius: 0 !important;
+     -moz-border-radius: 0 !important;
+          border-radius: 0 !important;
+}
+
+.navbar-inverse { 
+	background-color: #0D76B7;
+}
+
+.table th {
+	text-decoration: underline;
+	text-align: center;   
+}
+
+.table td {
+   text-align: center;   
+}
+
+.page-selection {
+	text-align: center;  
+}
+
+}

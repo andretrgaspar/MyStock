@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MyStock</title>
+
+    <!-- Bootstrap -->
+    <link rel="stylesheet" type="text/css" href="css/bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="css/bootstrap-theme.min.css" />  
+    <link rel="stylesheet" type="text/css" href="css/default.css" />
+	<link rel="stylesheet" type="text/css" href="css/component.css" />
+    <link rel="stylesheet" type="text/css" href="css/jPushMenu.css" />
+    <link rel="stylesheet" type="text/css" href="css/main.css" />  
+      
+	<script type="text/javascript" src="js/cordova-1.9.0.js"></script>	
+    <script type="text/javascript" src="js/jquery.min.js"></script>
+    <script type="text/javascript" src="js/bootstrap.min.js"></script>
+    <script type="text/javascript" src="js/jPushMenu.js"></script>  
+	<script type="text/javascript" src="js/bootpag.js"></script> 
+	 
+    <script type="text/javascript">
+		var actualPage = 1;
+		var orderCollumn = '';
+		var typeOrder = 'ASC';
+		var category = 0;
+		var total_pag = 0;
+		var nextPage = 0; //qd se altera de pagina não muda ordem DESC / ASC
+		
+        /////
+        ///Save Data Function
+        /////
+        function saveData(){
+            //Our text field data
+            var codigo = $('#code').val();
+            var descricao = $('#description').val();
+            var id_categoria = $('#categorias_select').val();
+            var sysdate = new Date();
+            var active = 'Y';
+			
+			if (codigo != '' && descricao != '' && id_categoria != null) {
+
+				//Check databases are supported
+				if(openDatabase){
+					//Open a database transaction
+					db.transaction(function(tx){
+						//Execute an SQL statement to create the table "tblDemo" 
+						//only if it doesn't already exist        
+						//tx.executeSql('DROP TABLE IF EXISTS produtos;',[],nullData,errorHandler);
+						tx.executeSql('CREATE TABLE IF NOT EXISTS produtos ('
+									   + 'id_produto INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,'
+									   + 'codigo VARCHAR(255),'
+									   + 'descricao VARCHAR(255),'
+									   + 'id_categoria INTEGER,'
+									   + 'date_created DATE,'
+									   + 'active VARCHAR(1)'
+									   + ');',[],nullData,errorHandler);
+					});
+
+					//Open a new transaction
+					db.transaction(function(tx){
+						tx.executeSql('INSERT INTO produtos ('
+									   + 'codigo, descricao, id_categoria, date_created, active )'
+									   + 'VALUES (?, ?, ?, ?, ?);'
+									   ,[codigo,descricao,id_categoria,sysdate,active],nullData,errorHandler);
+						
+						$('#code').val('');
+						$('#description').val('');
+						
+						//$('#result_sucesso').text('');
+						//$('<p>Inserido com sucesso!</p>').appendTo('#result_sucesso');
+						$('#result_sucesso').show();
+						$('#result_sucesso').css("opacity", "");
+						createAutoClosingAlert("#result_sucesso", 5000);
+					});
+				}
+			}
+			else {
+				//$('#result_erro').text('');
+				//$('<p>Deve preencher todos os campos!</p>').appendTo('#result_erro');
+				$('#result_erro').show();
+				$('#result_erro').css("opacity", "");
+				createAutoClosingAlert("#result_erro", 5000);
+			}
+        }
+
+        /////
+        ///Get Data Function
+        /////
+        function getData(pagen, sort, category){
+            //Create an empty results string
+            var strResults = '';
+			var cat_str = '<option value="0" selected>Todas</option>';  //adiciono o todas no inicio
+			actualPage = pagen;
+			
+			//get das categorias a filtrar
+			db.transaction(function(txc){
+				//Select a wildcard from the database
+				var sql_c = 'SELECT * FROM categorias WHERE active = "Y" ORDER BY descricao;';
+				var aux_cat = '';
+				
+				txc.executeSql(sql_c
+							   ,[]
+							   //Callback function with transaction and 
+							   //results objects
+							   ,function(txc, results){
+									var rowsCountc = results.rows.length;  
+									for (var i = 0; i < rowsCountc; i++){
+										aux_cat = '<option value="' + results.rows.item(i).id_categoria + '"';
+										if (category == results.rows.item(i).id_categoria) {
+											aux_cat += ' selected>';
+										} else {
+											aux_cat += '>';
+										}
+										aux_cat += results.rows.item(i).descricao + '</option>';
+
+										cat_str += aux_cat;
+									}
+								}
+							   ,errorHandler);		   
+			});
+
+            //Open a new transaction
+            db.transaction(function(tx){
+                //Select a wildcard from the database
+				var cat_sql_and = '';
+				if (category != 0) {
+					cat_sql_and += 'AND p.id_categoria = ' + category + ' ';
+				}
+				var sql = 'SELECT p.id_produto, p.codigo as codigo_prod, p.descricao as desc_prod, p.date_created as date_prod, '
+             			  + 'c.id_categoria, "[" || c.codigo || "] " || c.descricao as desc_cat '
+						  + 'FROM produtos p, categorias c '
+            			  + 'WHERE p.id_categoria = c.id_categoria '
+						  + cat_sql_and
+						  + 'AND p.active = "Y"';
+				
+				if (nextPage == 0) {
+					if (sort == orderCollumn) {
+						if (typeOrder == 'DESC') {
+							typeOrder = 'ASC';
+						}
+						else {
+							typeOrder = 'DESC';
+						}
+					} else {
+						typeOrder = 'ASC';
+					}
+				}
+
+				if (sort == 'codigo') {
+					sql += ' ORDER BY codigo_prod ' + typeOrder + ';';
+				}
+				else if (sort == 'descricao') {
+					sql += ' ORDER BY desc_prod ' + typeOrder + ';';
+				}
+				else if (sort == 'data') {
+					sql += ' ORDER BY date_prod ' + typeOrder + ';';
+				}
+				else {
+					sql += ';';
+				}
+				
+                tx.executeSql(sql
+                               ,[]
+                               //Callback function with transaction and 
+                               //results objects
+                               ,function(tx, results){
+                                    //Count the results rows
+                                    var rowsCount = results.rows.length;  
+									total_pag = Math.floor(rowsCount / 10);
+									//marosca para no total de registos 10, 20, ... mostrar pagina certa
+									if ((rowsCount / 10) % 1 === 0) {
+										//do nothing
+									} else {
+										total_pag = total_pag + 1;
+									}
+                                    //Loop the rows
+									strResults += '<table class="table">';
+									strResults += '<thead>';
+									strResults += '<tr>';
+									strResults += '<td><h3><b>Produtos</b></h3></td>';
+									strResults += '</tr>';
+									strResults += '<tr>';
+									strResults += '<td>';
+									
+									//Filtro categoria
+									strResults += '<form class="form-inline">';
+									strResults += '<div class="control-group" id="categoria_f">';
+									strResults += '<label for="description"><h4>Filtrar por categoria &nbsp</h4></label>';
+									strResults += '<select class="form-control categorias_filtro" id="categorias_filtro">';
+									strResults += cat_str;
+									strResults += '</select>';
+									strResults += '</div>';
+									strResults += '</form>';
+									
+									strResults += '</td>';
+									strResults += '</tr>';
+									strResults += '</thead>';
+									strResults += '</table>';
+									
+                                    strResults += '<table class="table table-bordered">';
+                                    strResults += '<thead>';
+                                    strResults += '<tr>';
+                                    strResults += '<th><b><a href="#" class="orderCodigo" id="orderCodigo">Código</a></b></th>';
+                                    strResults += '<th><b><a href="#" class="orderDescricao" id="orderDescricao">Produto</a></b></th>';
+									strResults += '<th><b><a href="#" class="orderCategoria" id="orderCategoria">Categoria</a></b></th>';
+									strResults += '<th><b><a href="#" class="orderData" id="orderData">Data criação</a></b></th>';
+                                    strResults += '</tr>';
+                                    strResults += '</thead>';
+                                    strResults += '<tbody>';
+									var init = 0;
+									var to = 10;
+									if (Math.floor(rowsCount / 10) == 0 && pagen == 1) {
+										init = 0;
+										to = rowsCount;
+									}
+									else {
+									    pagen = pagen - 1;
+										init = Number(pagen + '0');
+										to = Number(pagen + 1 + '0');
+										if (to >= rowsCount) {
+											to = rowsCount;
+										}
+										else {
+											//to igual
+										}
+									}
+
+                                    for (var i = init; i < to; i++){
+                                        strResults += '<tr>';
+                                        strResults += '<td>' + results.rows.item(i).codigo_prod;
+                                        
+                                        var createDate = new Date(results.rows.item(i).date_prod);
+										var actual_date = new Date();
+										var timeDiff = Math.abs(actual_date.getTime() - createDate.getTime());
+										var diffDays = Math.ceil(timeDiff / (1000 * 3600 * 24)); 
+										
+                                        if (diffDays <= 1) {
+                                            strResults += '&nbsp<span class="label label-default">Novo</span></td>';
+                                        } else {
+                                            strResults += '</td>';
+                                        }
+                                        
+                                        strResults += '<td>' + results.rows.item(i).desc_prod + '</td>';
+										
+										var d = new Date(results.rows.item(i).date_prod);
+										var month = d.getMonth()+1;
+										var day = d.getDate();
+
+										var date_created = (day<10 ? '0' : '') + day + '/' +
+														   (month<10 ? '0' : '') + month + '/' +
+														    d.getFullYear();
+										
+										strResults += '<td>' + results.rows.item(i).desc_cat + '</td>';
+										strResults += '<td>' + date_created + '</td>';
+                                        strResults += '</tr>';
+                                    }
+                                    strResults += '</tbody>';
+                                    strResults += '</table>';
+                                    //Fill the results DIV 
+                                    $('.results').html(strResults);
+									
+									$('#page-selection').bootpag({
+										total: total_pag
+									});/*.on("page", function(event, num){
+										//$(".results").html("Page " + num); // or some ajax content loading...
+										
+										// ... after content load -> change total to 10
+										//$(this).bootpag({total: 10, maxVisible: 10});
+										
+										getData(num, orderCollumn, category);
+									 
+									});*/
+									
+									orderCollumn = sort;
+									nextPage = 0; //settar valor a 0 para permitir ordem novamente
+									
+                                }
+                               ,errorHandler);
+            });
+	
+        }
+
+        /////
+        ///Error Handler
+        /////
+        function errorHandler(transaction, error) {
+            //Log the error
+            console.log('Error: ' + error.message + ' (Code ' + error.code + ')');
+        }
+
+        /////
+        ///Null Data
+        /////
+        function nullData(){
+            //Can be used for callbacks etc
+        }
+        /////
+        ///Document Ready 
+        /////
+        $(document).ready(function(){
+		    var pagen = 1;
+			var strResults = '';
+			var rowsCount = 0;
+            $('.toggle-menu').jPushMenu();
+            
+            //Bind events to the buttons to fire off the functions                       
+            $('#btnSave').bind('click' , saveData);
+            $('#btnGet').bind('click' , function() {
+				getData(1, "descricao", category);
+				}
+			);
+			
+			//bind de eventos de ordenação
+			$(".results").on("click", "a.orderCodigo", function(){
+				getData(actualPage, "codigo", category);
+			});
+            
+			$(".results").on("click", "a.orderDescricao", function(){
+				getData(actualPage, "descricao", category);
+			});
+
+			$(".results").on("click", "a.orderCategoria", function(){
+				getData(actualPage, "categoria", category);
+			});
+			
+			$(".results").on("click", "a.orderData", function(){
+				getData(actualPage, "data", category);
+			});	
+
+			$(".results").on("change", "select.categorias_filtro", function(){
+				category = this.value;
+				getData(actualPage, "data", this.value);
+			});					
+			
+			$(".cbp-spmenu").on("click", "a.exitBtn", function(){
+				exitAppPopup();
+			});	
+			
+			//pagination events
+			$("#page-selection").on("page", function(event, num){
+				nextPage = 1;
+				getData(num, orderCollumn, category);
+			});	
+			
+            //Open the database 
+            if(openDatabase){
+                db = openDatabase('Database Name' , '1.0' , 'Database Description' , 2 * 1024 * 1024);
+            }
+            //Alert the user to upgrade their browser
+            else {
+                alert('Databases not supported. Please get a proper browser');
+            }
+			
+			//Menu Button
+			document.addEventListener("deviceready", onDeviceReady, false);
+			
+			//get categorias
+            getCategorias();
+			
+        });  
+		
+		// PhoneGap is loaded and it is now safe to make calls PhoneGap methods
+		//
+		function onDeviceReady() {
+			// Register the event listener
+			document.addEventListener("menubutton", onMenuKeyDown, false);
+		}
+
+		// Handle the menu button
+		//
+		function onMenuKeyDown() {
+			$(".toggle-menu").trigger('click');
+		}
+		
+		function getCategorias() {
+			db.transaction(function(tx){
+                //Select a wildcard from the database
+				var sql_c = 'SELECT * FROM categorias WHERE active = "Y" ORDER BY descricao;';
+				
+				tx.executeSql(sql_c
+                               ,[]
+                               //Callback function with transaction and 
+                               //results objects
+                               ,function(tx, results){
+							        var rowsCount = results.rows.length;  
+                                    for (var i = 0; i < rowsCount; i++){
+										strResults = '<option value="' + results.rows.item(i).id_categoria + '">' 
+										strResults += results.rows.item(i).descricao + '</option>';
+										
+										$('#categorias_select').append(strResults);
+									}
+								}
+                               ,errorHandler);
+			});
+
+		}
+		
+		function createAutoClosingAlert(selector, delay) {
+			window.setTimeout(function() { 
+				$(selector).fadeTo(400, 0).slideUp(400, function(){
+					//$(this).closest("." + $(this).attr("data-hide")).hide();
+					$($(selector).attr("data-hide")).hide();
+				}); }
+			, delay);
+		}
+		
+		//exit popup
+		function exitAppPopup() {
+			navigator.notification.confirm(
+				'Deseja sair da aplicação?'
+				, function(button) {
+					if (button == 2) {
+						navigator.app.exitApp();
+					} 
+				}
+				, 'Sair'
+				, 'Não,Sim'
+			);  
+			return false;
+		}
+      
+    </script>
+  </head>
+  <body>
+        <nav class="cbp-spmenu cbp-spmenu-vertical cbp-spmenu-left">
+            <h3>MyStock</h3>
+            <a href="index.html">Início</a>
+            <a href="criar_categorias.html">Criar categorias</a>
+            <a href="#">Criar produtos</a>
+            <a href="#">Gerir entradas</a>
+            <a href="#">Gerir saídas</a>
+            <a href="#" class="exitBtn" id="exitBtn">Sair</a>
+        </nav>
+      
+          <nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+               <div class="navbar-header">
+                  <img class="toggle-menu menu-left" src="img/icon.png" alt="MyStock">
+                  <!-- <a class="navbar-brand" href="#">MyStock</a> -->
+               </div>
+           </nav>
+          
+            <div class="container" style="padding-top:60px;">
+                
+                <form role="form">
+					
+				    <div id="result_sucesso" class="alert alert-success" hidden="hidden">
+						<p>Inserido com sucesso!</p>
+					</div>
+					
+					<div id="result_erro" class="alert alert-warning" hidden="hidden">
+						<p>Deve preencher todos os campos!</p>
+					</div>
+                    
+                    <div class="form-group">
+                        <label for="code">Código produto</label>
+                        <input type="text" class="form-control" id="code">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="description">Nome produto</label>
+                        <input type="text" class="form-control" id="description">
+                    </div>
+                    
+                    <div class="form-group" id="categoria">
+                        <label for="description">Categoria</label>
+                        <select class="form-control" id="categorias_select">
+                        </select>
+                    </div>
+
+                </form>
+
+                    <div class="btn-group">
+						<button id="btnSave" type="button" class="btn btn-default">Criar</button>
+					</div>
+					
+					<div class="btn-group" style="float:right;">
+                        <button id="btnGet" type="button" class="btn btn-default">Listar</button>   
+                    </div>
+                    
+                </div>
+
+			<div class="results_pagination">
+				<div class="results"></div>
+				
+				<div id="page-selection" class="page-selection"></div>
+
+			</div>
+      </div>
+  </body>
+</html>
